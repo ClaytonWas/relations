@@ -169,11 +169,79 @@ function StepRow({ stepIndex, stepGuesses, isActive, isSolved, isExpanded, onTog
 }
 
 function ChainTile({ link, index, isExample, shake, pulse }) {
+  if (isExample) {
+    return (
+      <div style={{ position: "relative", paddingTop: 12 }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 18,
+            background: "#e5e0d8",
+            color: "#a09880",
+            padding: "2px 8px",
+            fontSize: 10,
+            fontWeight: 700,
+            borderRadius: "4px 4px 0 0",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          Start
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "center",
+            gap: 14,
+            width: "100%",
+            background: "white",
+            border: "1px solid #e5e0d8",
+            borderRadius: 4,
+            padding: "12px 18px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700,
+              fontSize: 17,
+              color: "#1c1813",
+              letterSpacing: "0.01em",
+              textAlign: "left",
+            }}
+          >
+            {link.prompt}
+          </span>
+          <span style={{ color: "#c5bdb0", fontSize: 14, fontStyle: "italic" }}>
+            is to
+          </span>
+          <span
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700,
+              fontSize: 17,
+              color: "#1a3a5c",
+              letterSpacing: "0.01em",
+              textAlign: "right",
+            }}
+          >
+            {link.answer}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
+        gap: 14,
         width: "100%",
         background: "white",
         border: "1px solid #e5e0d8",
@@ -189,14 +257,14 @@ function ChainTile({ link, index, isExample, shake, pulse }) {
           fontWeight: 700,
           fontSize: 17,
           color: "#1c1813",
-          flex: 1,
           letterSpacing: "0.01em",
+          textAlign: "left",
         }}
       >
         {link.prompt}
       </span>
-      <span style={{ color: "#c5bdb0", margin: "0 14px", fontSize: 14, fontStyle: "italic" }}>
-        —
+      <span style={{ color: "#c5bdb0", fontSize: 14, fontStyle: "italic" }}>
+        is to
       </span>
       <span
         style={{
@@ -205,24 +273,11 @@ function ChainTile({ link, index, isExample, shake, pulse }) {
           fontSize: 17,
           color: "#1a3a5c",
           letterSpacing: "0.01em",
+          textAlign: "right",
         }}
       >
         {link.answer}
       </span>
-      {isExample && (
-        <span
-          style={{
-            marginLeft: 14,
-            fontSize: 10,
-            color: "#a09880",
-            fontStyle: "italic",
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-          }}
-        >
-          seed
-        </span>
-      )}
     </div>
   );
 }
@@ -375,18 +430,6 @@ export default function App() {
 
           <p
             style={{
-              fontSize: 11,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "#a09880",
-              margin: "0 0 12px",
-            }}
-          >
-            {CATEGORY_LABELS[puzzle.batsFamily]}
-          </p>
-
-          <p
-            style={{
               fontSize: 15,
               color: "#6b6153",
               lineHeight: 1.6,
@@ -422,8 +465,10 @@ export default function App() {
           {!completed && currentLink && (
             <div
               style={{
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "1fr auto 1fr",
                 alignItems: "center",
+                gap: 14,
                 width: "100%",
                 background: inputBg,
                 border: `2px solid ${inputBorderColor}`,
@@ -440,14 +485,14 @@ export default function App() {
                   fontWeight: 700,
                   fontSize: 17,
                   color: "#1c1813",
-                  flex: 1,
                   letterSpacing: "0.01em",
+                  textAlign: "left",
                 }}
               >
                 {currentLink.prompt}
               </span>
-              <span style={{ color: "#c5bdb0", margin: "0 14px", fontSize: 14, fontStyle: "italic" }}>
-                —
+              <span style={{ color: "#c5bdb0", fontSize: 14, fontStyle: "italic" }}>
+                is to
               </span>
               <input
                 ref={inputRef}
@@ -463,7 +508,7 @@ export default function App() {
                   fontWeight: 700,
                   fontSize: 17,
                   color: "#1a3a5c",
-                  width: 130,
+                  width: "100%",
                   textAlign: "right",
                   letterSpacing: "0.01em",
                 }}
@@ -493,6 +538,9 @@ export default function App() {
                 }}
               >
                 Chain Complete
+              </div>
+              <div style={{ color: "#dbe8f6", fontSize: 14, marginBottom: 8, fontFamily: "'Playfair Display', serif", fontStyle: "italic" }}>
+                {CATEGORY_LABELS[puzzle.batsFamily]}
               </div>
               <div style={{ color: "#a8c4e0", fontSize: 13, letterSpacing: "0.04em" }}>
                 {totalGuesses} guess{totalGuesses !== 1 ? "es" : ""} &nbsp;·&nbsp; par {puzzle.par}
