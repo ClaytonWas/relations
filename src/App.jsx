@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { samplePuzzle } from "./puzzleData";
+import { listPuzzles, loadPuzzle, getDailyPuzzle } from "./puzzleData";
 
 function similarity(a, b) {
   const s = a.toLowerCase().trim();
@@ -283,7 +283,9 @@ function ChainTile({ link, index, isExample, shake, pulse }) {
 }
 
 export default function App() {
-  const puzzle = samplePuzzle;
+  const [puzzleList, setPuzzleList] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [puzzle, setPuzzle] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [inputValue, setInputValue] = useState("");
   const [totalGuesses, setTotalGuesses] = useState(0);
@@ -294,6 +296,45 @@ export default function App() {
   const [shakingInput, setShakingInput] = useState(false);
   const [newTileIndex, setNewTileIndex] = useState(null);
   const inputRef = useRef(null);
+
+  // Load the puzzle list once, and seed the selection with today's daily.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listPuzzles(), getDailyPuzzle()]).then(([list, daily]) => {
+      if (cancelled) return;
+      setPuzzleList(list);
+      setSelectedId(daily.id);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Whenever the selected puzzle changes, fetch it and reset all game state.
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    loadPuzzle(selectedId).then((p) => {
+      if (cancelled || !p) return;
+      setPuzzle(p);
+      setCurrentStep(1);
+      setInputValue("");
+      setTotalGuesses(0);
+      setGuessHistory([]);
+      setFeedback(null);
+      setCompleted(false);
+      setExpandedStep(null);
+      setShakingInput(false);
+      setNewTileIndex(null);
+    });
+    return () => { cancelled = true; };
+  }, [selectedId]);
+
+  if (!puzzle) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#faf8f4", display: "flex", alignItems: "center", justifyContent: "center", color: "#a09880", fontFamily: "Georgia, serif" }}>
+        Loading…
+      </div>
+    );
+  }
 
   const isFinished = currentStep >= puzzle.chain.length;
   const currentLink = puzzle.chain[currentStep] ?? null;
@@ -388,6 +429,56 @@ export default function App() {
           color: "#1c1813",
         }}
       >
+        {/* Puzzle picker */}
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 440,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 28,
+            fontFamily: "Georgia, serif",
+          }}
+        >
+          <label
+            htmlFor="puzzle-picker"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "#a09880",
+              fontFamily: "'Playfair Display', serif",
+              fontStyle: "italic",
+              flexShrink: 0,
+            }}
+          >
+            Puzzle
+          </label>
+          <select
+            id="puzzle-picker"
+            value={selectedId ?? ""}
+            onChange={(e) => setSelectedId(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              border: "1px solid #e5e0d8",
+              borderRadius: 4,
+              background: "white",
+              fontFamily: "Georgia, serif",
+              fontSize: 13,
+              color: "#1c1813",
+              cursor: "pointer",
+            }}
+          >
+            {puzzleList.map((p) => (
+              <option key={p.id} value={p.id}>
+                {String(p.number).padStart(2, "0")} · {p.batsFamily} — {p.batsCategory}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Header */}
         <div style={{ textAlign: "center", maxWidth: 480, marginBottom: 36, animation: "fade-up 0.5s ease" }}>
           <div
@@ -438,6 +529,24 @@ export default function App() {
           >
             Find the word that continues the relationship at each step.
           </p>
+
+          <div
+            style={{
+              marginTop: 18,
+              display: "inline-block",
+              padding: "5px 14px",
+              border: "1px solid #1a3a5c",
+              borderRadius: 999,
+              fontSize: 11,
+              fontFamily: "'Playfair Display', serif",
+              letterSpacing: "0.10em",
+              textTransform: "uppercase",
+              color: "#1a3a5c",
+              background: "white",
+            }}
+          >
+            {puzzle.batsCategory}
+          </div>
         </div>
 
         {/* Chain */}
