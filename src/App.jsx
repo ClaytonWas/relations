@@ -529,24 +529,6 @@ export default function App() {
           >
             Find the word that continues the relationship at each step.
           </p>
-
-          <div
-            style={{
-              marginTop: 18,
-              display: "inline-block",
-              padding: "5px 14px",
-              border: "1px solid #1a3a5c",
-              borderRadius: 999,
-              fontSize: 11,
-              fontFamily: "'Playfair Display', serif",
-              letterSpacing: "0.10em",
-              textTransform: "uppercase",
-              color: "#1a3a5c",
-              background: "white",
-            }}
-          >
-            {puzzle.batsCategory}
-          </div>
         </div>
 
         {/* Chain */}
