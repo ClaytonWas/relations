@@ -1,17 +1,89 @@
 import { useState, useRef, useEffect } from "react";
 import { listPuzzles, loadPuzzle, getDailyPuzzle } from "./puzzleData";
 
-function similarity(a, b) {
+function levenshtein(a, b) {
   const s = a.toLowerCase().trim();
   const t = b.toLowerCase().trim();
-  if (s === t) return 1;
-  const longer = Math.max(s.length, t.length);
-  if (longer === 0) return 1;
-  let matches = 0;
-  for (let i = 0; i < Math.min(s.length, t.length); i++) {
-    if (s[i] === t[i]) matches++;
+  if (s === t) return 0;
+  const m = s.length, n = t.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  let curr = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
   }
-  return matches / longer;
+  return prev[n];
+}
+
+// Wordle-style coloring of the player's guess against the answer.
+// Returns same-length array of "hit" | "present" | "miss". Operates on lowercased strings.
+function wordleColors(guess, answer) {
+  const g = guess.toLowerCase();
+  const a = answer.toLowerCase();
+  const result = new Array(g.length).fill("miss");
+  const remaining = {};
+  for (let i = 0; i < a.length; i++) {
+    if (g[i] === a[i]) {
+      result[i] = "hit";
+    } else {
+      remaining[a[i]] = (remaining[a[i]] ?? 0) + 1;
+    }
+  }
+  for (let i = 0; i < g.length; i++) {
+    if (result[i] === "hit") continue;
+    if (remaining[g[i]]) {
+      result[i] = "present";
+      remaining[g[i]]--;
+    }
+  }
+  return result;
+}
+
+// Deterministic morphology check keyed on batsCategory.
+// Returns { matched: bool, label: string } or null when the category has no useful pattern.
+const IRREGULAR_PLURALS = new Set(["men","women","children","teeth","feet","mice","geese","oxen","people"]);
+const FEMALE_SUFFIXES = ["ess","ress","ine","trix","ette"];
+
+function morphologyCheck(category, guess) {
+  const g = guess.toLowerCase().trim();
+  if (!g) return null;
+  switch (category) {
+    case "verb:past_tense":
+      return { matched: g.endsWith("ed") || g.length >= 3, label: g.endsWith("ed") ? "✓ ends in -ed" : "expected -ed (or strong past form)" };
+    case "verb:present_participle":
+      return { matched: g.endsWith("ing"), label: g.endsWith("ing") ? "✓ ends in -ing" : "expected -ing" };
+    case "adj:comparative":
+      return { matched: g.endsWith("er"), label: g.endsWith("er") ? "✓ ends in -er" : "expected -er" };
+    case "adj:superlative":
+      return { matched: g.endsWith("est"), label: g.endsWith("est") ? "✓ ends in -est" : "expected -est" };
+    case "adj:adverb":
+      return { matched: g.endsWith("ly"), label: g.endsWith("ly") ? "✓ ends in -ly" : "expected -ly" };
+    case "noun:plural": {
+      const ok = g.endsWith("s") || g.endsWith("es") || IRREGULAR_PLURALS.has(g);
+      return { matched: ok, label: ok ? "✓ plural form" : "expected a plural form" };
+    }
+    case "male:female": {
+      const ok = FEMALE_SUFFIXES.some((s) => g.endsWith(s));
+      return { matched: ok, label: ok ? "✓ female-marked" : "expected a female form" };
+    }
+    default:
+      return null;
+  }
+}
+
+// How many letters of the answer to reveal given wrong-guess count.
+// 0 wrongs → nothing. 1 → length only. 3 → +1st letter. 5 → +2nd. 7 → full answer.
+function revealCount(wrongCount) {
+  if (wrongCount >= 7) return Infinity;
+  if (wrongCount >= 5) return 2;
+  if (wrongCount >= 3) return 1;
+  return 0;
 }
 
 const CATEGORY_LABELS = {
@@ -165,6 +237,162 @@ function StepRow({ stepIndex, stepGuesses, isActive, isSolved, isExpanded, onTog
         </ul>
       )}
     </li>
+  );
+}
+
+function WordleRow({ guess, colors }) {
+  const palette = {
+    hit:     { bg: "#1a3a5c", color: "white",   border: "#1a3a5c" },
+    present: { bg: "#c9a227", color: "white",   border: "#c9a227" },
+    miss:    { bg: "#e5e0d8", color: "#6b6153", border: "#d6cfc1" },
+  };
+  return (
+    <div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
+      {guess.split("").map((ch, i) => {
+        const c = palette[colors[i] ?? "miss"];
+        return (
+          <span
+            key={i}
+            style={{
+              width: 26, height: 26,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: c.bg, color: c.color,
+              border: `1px solid ${c.border}`,
+              borderRadius: 3,
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 700, fontSize: 14,
+              textTransform: "uppercase",
+            }}
+          >
+            {ch}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function FeedbackPanel({ answer, stepGuesses }) {
+  const wrongs = stepGuesses.filter((g) => !g.correct);
+  if (wrongs.length === 0) return null;
+  const latest = wrongs[wrongs.length - 1];
+  const reveal = revealCount(wrongs.length);
+  const revealedFull = reveal === Infinity;
+  const revealedLen = revealedFull ? answer.length : reveal;
+
+  const scaffold = answer
+    .split("")
+    .map((ch, i) => (i < revealedLen ? ch : "_"))
+    .join(" ");
+
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        background: "white",
+        border: "1px solid #e5e0d8",
+        borderRadius: 4,
+        padding: "14px 18px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        animation: "pulse-in 0.3s ease",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "#a09880",
+          fontFamily: "'Playfair Display', serif",
+          fontStyle: "italic",
+          textAlign: "center",
+        }}
+      >
+        Last guess
+      </div>
+
+      <WordleRow guess={latest.guess} colors={latest.colors ?? []} />
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          fontSize: 11,
+          color: "#6b6153",
+          fontFamily: "Georgia, serif",
+        }}
+      >
+        <span
+          style={{
+            padding: "3px 9px",
+            background: "#f7f4ef",
+            border: "1px solid #e5e0d8",
+            borderRadius: 999,
+          }}
+        >
+          {latest.distance} edit{latest.distance !== 1 ? "s" : ""} away
+        </span>
+        {latest.morphology && (
+          <span
+            style={{
+              padding: "3px 9px",
+              background: latest.morphology.matched ? "#eef3f9" : "#fdf2f1",
+              border: `1px solid ${latest.morphology.matched ? "#1a3a5c" : "#e2bdb7"}`,
+              color: latest.morphology.matched ? "#1a3a5c" : "#8c3a2e",
+              borderRadius: 999,
+            }}
+          >
+            {latest.morphology.label}
+          </span>
+        )}
+        <span
+          style={{
+            padding: "3px 9px",
+            background: "#f7f4ef",
+            border: "1px solid #e5e0d8",
+            borderRadius: 999,
+          }}
+        >
+          answer is {answer.length} letter{answer.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <div
+        style={{
+          textAlign: "center",
+          fontFamily: "'Playfair Display', serif",
+          fontWeight: 700,
+          fontSize: 18,
+          letterSpacing: "0.12em",
+          color: revealedFull ? "#1a3a5c" : "#3d3529",
+          paddingTop: 4,
+          borderTop: "1px solid #f0ebe3",
+        }}
+      >
+        {scaffold}
+      </div>
+
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 10,
+          color: "#a09880",
+          fontFamily: "'Playfair Display', serif",
+          fontStyle: "italic",
+          letterSpacing: "0.06em",
+        }}
+      >
+        {revealedFull
+          ? "answer revealed — type it to advance"
+          : reveal === 0
+          ? `${3 - wrongs.length} more wrong guess${3 - wrongs.length !== 1 ? "es" : ""} reveals the first letter`
+          : `${(reveal === 1 ? 5 : 7) - wrongs.length} more reveals ${reveal === 1 ? "another letter" : "the answer"}`}
+      </div>
+    </div>
   );
 }
 
@@ -346,9 +574,13 @@ export default function App() {
     const guess = inputValue.trim();
     const answer = currentLink.answer;
     const isCorrect = guess.toLowerCase() === answer.toLowerCase();
-    const score = similarity(guess, answer);
+    const distance = levenshtein(guess, answer);
+    const longer = Math.max(guess.length, answer.length, 1);
+    const score = 1 - distance / longer;
+    const colors = wordleColors(guess, answer);
+    const morphology = morphologyCheck(puzzle.batsCategory, guess);
 
-    setGuessHistory((prev) => [...prev, { guess, step: currentStep, correct: isCorrect, score }]);
+    setGuessHistory((prev) => [...prev, { guess, step: currentStep, correct: isCorrect, score, distance, colors, morphology }]);
     setTotalGuesses((n) => n + 1);
     setInputValue("");
     setFeedback(isCorrect ? "correct" : "wrong");
@@ -605,6 +837,14 @@ export default function App() {
                 }}
               />
             </div>
+          )}
+
+          {/* Per-guess feedback for the active step */}
+          {!completed && currentLink && (
+            <FeedbackPanel
+              answer={currentLink.answer}
+              stepGuesses={guessHistory.filter((g) => g.step === currentStep)}
+            />
           )}
 
           {/* Completion banner */}
